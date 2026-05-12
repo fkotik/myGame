@@ -9,6 +9,8 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.stage.Stage;
+import javafx.scene.control.Label;
+
 
 public class HelloController {
 
@@ -22,6 +24,9 @@ public class HelloController {
     private void startGame() {
         sceneManager.showGameScene();
     }
+
+    @FXML
+    private Label recordLabel;
 
     @FXML
     private ResourceBundle resources;
@@ -49,7 +54,10 @@ public class HelloController {
 
     @FXML
     void initialize() {
-
+        int record = RecordManager.getRecord();
+        if (recordLabel != null) {
+            recordLabel.setText("Рекорд: " + record);
+        }
     }
 
 }

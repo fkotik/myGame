@@ -2,8 +2,10 @@ package com.example.mygame;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 import javafx.animation.AnimationTimer;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
@@ -32,27 +34,40 @@ public class GameController {
     private ImageView cube;
 
     @FXML
-    private ImageView platformImage1, platformImage2, platformImage3, platformImage4, platformImage5;
+    private ImageView platformImage1, platformImage2, platformImage3, platformImage4, platformImage5, platformImage6, platformImage7, platformImage8;
 
     @FXML
     private Label loseLabel;
+    @FXML
+    private Label scoreLabel;
+
+    private int score = 0;
+    private double highestY = 0;        // Самая высокая точка игрока (в мировых координатах)
+    private double totalScrolled = 0;   // Сколько всего проскроллили вниз
+
+    private void updateScoreLabel() {
+        scoreLabel.setText("Score: " + score);
+    }
 
     // Физические переменные
     private double velocityY = 0;
-    private double gravity = 0.2;
-    private double maxVelocityY = 10;
+    private double gravity = 0.3;     // Гравитация
+    private double maxVelocityY = 15; // Макс скорость падения
 
     private double velocityX = 0;
-    private double acceleration = 0.5; // Ускорение
-    private double maxSpeed = 4; // Максимальная скорость
-    private double friction = 0.98; // Трение в воздухе
-    private double groundFriction = 0.92; // Трение на земле
+    private double acceleration = 0.6;
+    private double maxSpeed = 5;
+    private double friction = 0.8;
 
-    private double jumpForce = -12; // Отрицательная сила для прыжка вверх
-    private boolean isGrounded = false;
+    private double jumpForce = -12; // Сила прыжка
+    private boolean isGrounded = false; // Флаг: стоим ли мы на платформе
 
     private List<ImageView> obstacles = new ArrayList<>();
     private AnimationTimer gameLoop;
+    private Random random = new Random();
+
+    // Камера (прокрутка)
+    private double scrollThreshold = 300; // Высота, на которой экран начинает ехать вниз
 
     // Клавиши управления
     private boolean leftPressed = false;
@@ -70,12 +85,11 @@ public class GameController {
 
     private void handleKeyPress(KeyEvent event) {
         KeyCode keyCode = event.getCode();
-
         switch (keyCode) {
             case W:
             case UP:
             case SPACE:
-                jump();
+                jump(); // РУЧНОЙ ПРЫЖОК
                 break;
             case A:
             case LEFT:
@@ -95,7 +109,6 @@ public class GameController {
 
     private void handleKeyRelease(KeyEvent event) {
         KeyCode keyCode = event.getCode();
-
         switch (keyCode) {
             case A:
             case LEFT:
@@ -109,6 +122,7 @@ public class GameController {
     }
 
     private void jump() {
+        // Прыгаем только если стоим на платформе
         if (isGrounded) {
             velocityY = jumpForce;
             isGrounded = false;
@@ -116,7 +130,6 @@ public class GameController {
     }
 
     private void updateMovement() {
-        // Обновляем горизонтальную скорость
         if (leftPressed && !rightPressed) {
             velocityX -= acceleration;
             if (velocityX < -maxSpeed) velocityX = -maxSpeed;
@@ -124,110 +137,145 @@ public class GameController {
             velocityX += acceleration;
             if (velocityX > maxSpeed) velocityX = maxSpeed;
         } else {
-            // Применяем трение
-            if (isGrounded) {
-                velocityX *= groundFriction;
-            } else {
-                velocityX *= friction; // Меньшее трение в воздухе
-            }
-
+            velocityX *= friction;
             if (Math.abs(velocityX) < 0.1) velocityX = 0;
         }
 
-        // Применяем горизонтальное движение
         double newX = cube.getLayoutX() + velocityX;
 
-        // Проверка границ по X
-        if (newX < -25) {
-            newX = gamePane.getWidth() - cube.getFitWidth();
-        }
-        if (newX > gamePane.getWidth() - cube.getFitWidth() + 25) {
-            newX = 0;
+        // Переход сквозь стены (как в Doodle Jump: ушел влево - вышел справа)
+        if (newX < -cube.getFitWidth()) {
+            newX = gamePane.getWidth();
+        } else if (newX > gamePane.getWidth()) {
+            newX = -cube.getFitWidth();
         }
 
         cube.setLayoutX(newX);
     }
 
     private void falling() {
-        // Сохраняем старую позицию
         double oldY = cube.getLayoutY();
-
-        // Применяем гравитацию
         velocityY += gravity;
 
-        // Ограничиваем максимальную скорость падения
         if (velocityY > maxVelocityY) velocityY = maxVelocityY;
         if (velocityY < -maxVelocityY) velocityY = -maxVelocityY;
 
-        // Новая позиция после движения
         double newY = oldY + velocityY;
 
-        // Сбрасываем флаг grounded
+        // Сбрасываем флаг перед проверкой столкновений
         isGrounded = false;
 
-        // Проверяем коллизии со всеми платформами
-        for (ImageView platform : obstacles) {
-            // Получаем границы платформы
-            double platformTop = platform.getLayoutY();
-            double platformLeft = platform.getLayoutX();
-            double platformRight = platform.getLayoutX() + platform.getFitWidth();
+        // Проверяем коллизии (только при падении вниз)
+        if (velocityY > 0) {
+            for (ImageView platform : obstacles) {
+                double platformTop = platform.getLayoutY();
+                double platformLeft = platform.getLayoutX();
+                double platformRight = platform.getLayoutX() + platform.getFitWidth();
+                double cubeLeft = cube.getLayoutX();
+                double cubeRight = cube.getLayoutX() + cube.getFitWidth();
 
-            // Получаем границы куба
-            double cubeLeft = cube.getLayoutX();
-            double cubeRight = cube.getLayoutX() + cube.getFitWidth();
-
-            // Проверяем горизонтальное пересечение
-            if (cubeRight > platformLeft && cubeLeft < platformRight) {
-                // Проверяем движение вниз (падение)
-                if (velocityY > 0) {
-                    // Старая нижняя граница куба
+                // Если куб находится над платформой по X
+                if (cubeRight > platformLeft && cubeLeft < platformRight) {
                     double oldCubeBottom = oldY + cube.getFitHeight();
-                    // Новая нижняя граница куба
                     double newCubeBottom = newY + cube.getFitHeight();
 
-                    // Если куб падал и пересек верхнюю границу платформы
-                    if (oldCubeBottom <= platformTop && newCubeBottom >= platformTop) {
-                        // Приземляем на платформу
-                        newY = platformTop - 58;
-                        velocityY = 0;
-                        isGrounded = true;
-                        break; // Приземлились на первую же платформу
+                    // Если куб пересекает верхнюю границу платформы
+                    if (oldCubeBottom <= platformTop + 10 && newCubeBottom >= platformTop) {
+                        // ОСТАНАВЛИВАЕМ КУБ (РУЧНОЙ ПРЫЖОК)
+                        newY = platformTop - 59; // Ставим ровно на платформу
+                        velocityY = 0; // Гасим скорость падения
+                        isGrounded = true; // Теперь можно прыгать
+                        break;
                     }
                 }
             }
         }
 
-        // Применяем новую позицию
-        cube.setLayoutY(newY);
+        // ==========================================
+        // ЭФФЕКТ КАМЕРЫ (Скроллинг мира)
+        // ==========================================
+        // Если игрок поднимается выше порога (scrollThreshold),
+        // мы оставляем его на месте, а платформы двигаем ВНИЗ
+        if (newY < scrollThreshold) {
+            double deltaY = scrollThreshold - newY; // На сколько игрок улетел вверх
+            newY = scrollThreshold; // Удерживаем игрока на пороге
 
-        // Дополнительная проверка: если куб все еще пересекается с платформой и не движется вверх, выталкиваем его
-        if (!isGrounded && velocityY >= 0) {
+            // Двигаем все платформы вниз на deltaY
             for (ImageView platform : obstacles) {
-                if (cube.getBoundsInParent().intersects(platform.getBoundsInParent())) {
-                    double platformTop = platform.getLayoutY();
-                    cube.setLayoutY(platformTop - 58);
-                    velocityY = 0;
-                    isGrounded = true;
-                    break;
-                }
+                platform.setLayoutY(platform.getLayoutY() + deltaY);
+            }
+            totalScrolled += deltaY;
+
+            // Обновляем счёт (делим на 5 чтобы не рос слишком быстро)
+            int newScore = (int) (totalScrolled / 5);
+            if (newScore > score) {
+                score = newScore;
+                updateScoreLabel();
             }
         }
 
-        // Проверка пола (нижняя граница)
-        if (cube.getLayoutY() + cube.getFitHeight() >= gamePane.getHeight()) {
-            escapeBackgroundImage.toFront();
-            escapeBackgroundImage.setVisible(true);
-            loseLabel.toFront();
-            loseLabel.setVisible(true);
-            backBtn.toFront();
-            backBtn.setVisible(true);
-            backBtn.setDisable(false);
-            escape = false;
+        cube.setLayoutY(newY);
+
+        // Генерация новых платформ (перенос упавших платформ наверх)
+        recyclePlatforms();
+
+        // Проверка смерти (упал за нижний край экрана)
+        if (cube.getLayoutY() > gamePane.getHeight()) {
+            gameOver();
         }
+    }
+
+    // ==========================================
+    // ГЕНЕРАЦИЯ ПЛАТФОРМ
+    // ==========================================
+    private void recyclePlatforms() {
+        // Ищем самую высокую платформу (с минимальным Y)
+        double highestPlatformY = Double.MAX_VALUE;
+        for (ImageView p : obstacles) {
+            if (p.getLayoutY() < highestPlatformY) {
+                highestPlatformY = p.getLayoutY();
+            }
+        }
+
+        // Проверяем платформы, которые ушли за нижний край экрана
+        for (ImageView platform : obstacles) {
+            if (platform.getLayoutY() > gamePane.getHeight()) {
+                // Возвращаем её наверх над самой высокой платформой
+                // Случайное расстояние между платформами
+                double verticalGap = 70 + random.nextDouble() * 50;
+                platform.setLayoutY(highestPlatformY - verticalGap);
+
+                // Случайная позиция по X
+                double paneWidth = gamePane.getWidth() > 0 ? gamePane.getWidth() : 600;
+                double maxPositionX = paneWidth - platform.getFitWidth();
+                platform.setLayoutX(random.nextDouble() * maxPositionX);
+
+                // Обновляем верхнюю точку
+                highestPlatformY = platform.getLayoutY();
+            }
+        }
+    }
+
+    private void gameOver() {
+        if (gameLoop != null) gameLoop.stop();
+
+        RecordManager.saveRecord(score);
+        int record = RecordManager.getRecord();
+
+        escapeBackgroundImage.toFront();
+        escapeBackgroundImage.setVisible(true);
+        loseLabel.toFront();
+        loseLabel.setVisible(true);
+
+        loseLabel.setText("Вы проиграли!\nСчёт: " + score + "\nРекорд: " + record);
+
+        backBtn.toFront();
+        backBtn.setVisible(true);
+        backBtn.setDisable(false);
+        escape = false;
 
     }
 
-    //пауза
     private void toggleEscapeMenu() {
         if (escape) {
             escapeBackgroundImage.toFront();
@@ -241,48 +289,61 @@ public class GameController {
             escapeBackgroundImage.setVisible(false);
             backBtn.setVisible(false);
             backBtn.setDisable(true);
+            loseLabel.setVisible(false);
             escape = true;
             startGameLoop();
         }
     }
 
-    //запуск движка
     private void startGameLoop() {
         gameLoop = new AnimationTimer() {
             @Override
             public void handle(long now) {
-                updateMovement();  // Обновляем горизонтальное движение
-                falling();   // Обновляем физику (падение и прыжки)
+                updateMovement();
+                falling();
             }
         };
         gameLoop.start();
     }
 
-    //выход в главное меню
     @FXML
     private void backToHello() {
-        if (gameLoop != null) {
-            gameLoop.stop();
-        }
+        if (gameLoop != null) gameLoop.stop();
         sceneManager.showHelloScene();
     }
 
-    //инициализация сцены
     @FXML
     void initialize() {
-        // Добавляем платформы в список препятствий
         obstacles.add(platformImage1);
         obstacles.add(platformImage2);
         obstacles.add(platformImage3);
         obstacles.add(platformImage4);
         obstacles.add(platformImage5);
+        obstacles.add(platformImage6);
+        obstacles.add(platformImage7);
+        obstacles.add(platformImage8);
 
-        // Устанавливаем начальную позицию куба
         cube.setLayoutX(250);
-        cube.setLayoutY(300);
+        cube.setLayoutY(400);
 
-        // Запускаем игровой цикл
+        // Раскидываем платформы по экрану при запуске игры
+        Platform.runLater(() -> {
+            double startY = 500;
+            for (ImageView platform : obstacles) {
+                platform.setLayoutY(startY);
+                double maxPositionX = gamePane.getWidth() - platform.getFitWidth();
+                platform.setLayoutX(random.nextDouble() * maxPositionX);
+                startY -= (80 + random.nextDouble() * 40); // Расстояние между первыми
+            }
+            // Гарантируем, что под игроком будет платформа при старте
+            obstacles.get(0).setLayoutX(250);
+            obstacles.get(0).setLayoutY(480);
+        });
+
+        score = 0;
+        totalScrolled = 0;
+        scoreLabel.setText("Score: 0");
+
         startGameLoop();
-
     }
 }
