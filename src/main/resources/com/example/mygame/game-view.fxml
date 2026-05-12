@@ -65,6 +65,20 @@
             <Image url="@../../../images/Cube.png" />
          </image>
       </ImageView>
-      <Label fx:id="scoreLabel" layoutX="390.0" layoutY="46.0" text="0" />
+      <Label fx:id="scoreLabel" layoutX="429.0" layoutY="26.0" text="0">
+         <font>
+            <Font size="19.0" />
+         </font>
+      </Label>
+      <ImageView fx:id="enemyImage" fitHeight="58.0" fitWidth="72.0" layoutX="-124.0" layoutY="174.0" pickOnBounds="true" preserveRatio="true">
+         <image>
+            <Image url="@../../../images/enemy.png" />
+         </image>
+      </ImageView>
+      <ImageView fx:id="bulletImage" fitHeight="21.0" fitWidth="11.0" layoutX="-60.0" layoutY="318.0" pickOnBounds="true" preserveRatio="true">
+         <image>
+            <Image url="@../../../images/bullet.png" />
+         </image>
+      </ImageView>
    </children>
 </AnchorPane>
