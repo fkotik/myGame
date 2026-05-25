@@ -53,6 +53,19 @@ public class HelloController {
     }
 
     @FXML
+    private Button rulesBtn;
+
+    @FXML
+    private void showRules() {
+        sceneManager.showRulesScene();
+    }
+
+    @FXML
+    void onRulesBtnClick(ActionEvent event) {
+        showRules();
+    }
+
+    @FXML
     void initialize() {
         int record = RecordManager.getRecord();
         if (recordLabel != null) {
